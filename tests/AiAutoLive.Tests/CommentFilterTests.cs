@@ -2,7 +2,7 @@ using AiAutoLive;
 
 public class CommentFilterTests
 {
-    readonly CommentFilter f = new("page1");
+    readonly CommentFilter f = new(() => "page1");
 
     static Comment C(string authorId, string message) =>
         new(Guid.NewGuid().ToString(), authorId, "Lan", message, DateTimeOffset.UnixEpoch);

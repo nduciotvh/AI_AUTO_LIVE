@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace AiAutoLive;
 
 /// Polls the Graph API for new comments on the Page's live video and queues the ones worth answering.
-public sealed class CommentPoller(HttpClient http, IOptions<LiveOptions> options, CommentFilter filter,
+public sealed class CommentPoller(HttpClient http, IOptionsMonitor<LiveOptions> options, CommentFilter filter,
     Channel<Comment> comments, ILogger<CommentPoller> log) : BackgroundService
 {
     record GraphList<T>(List<T>? Data);
@@ -22,10 +22,18 @@ public sealed class CommentPoller(HttpClient http, IOptions<LiveOptions> options
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var o = options.Value;
+        // CurrentValue is re-read each round so a Page ID or token saved on the settings page applies without restart.
+        var o = options.CurrentValue;
         var videoId = o.LiveVideoId;
         while (videoId == "")
         {
+            o = options.CurrentValue;
+            if (string.IsNullOrWhiteSpace(o.PageId))
+            {
+                log.LogWarning("Chưa có Facebook Page ID: điền tại http://localhost:5000/settings.html");
+                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                continue;
+            }
             var live = await GetAsync<GraphList<GraphId>>($"{o.PageId}/live_videos?broadcast_status=%5B%22LIVE%22%5D&fields=id", stoppingToken);
             videoId = live is { Data: [var v, ..] } ? v.Id : "";
             if (videoId != "") break;
@@ -73,7 +81,12 @@ public sealed class CommentPoller(HttpClient http, IOptions<LiveOptions> options
     /// null on any failure (already logged); callers simply try again on their next round.
     async Task<T?> GetAsync<T>(string pathAndQuery, CancellationToken ct) where T : class
     {
-        var o = options.Value;
+        var o = options.CurrentValue;
+        if (string.IsNullOrWhiteSpace(o.PageAccessToken))
+        {
+            log.LogWarning("Chưa có Page Access Token: điền tại http://localhost:5000/settings.html");
+            return null;
+        }
         try
         {
             // Never log this URL: it carries the access token.
@@ -81,7 +94,7 @@ public sealed class CommentPoller(HttpClient http, IOptions<LiveOptions> options
             using var res = await http.GetAsync(url, ct);
             var body = await res.Content.ReadAsStringAsync(ct);
             if (res.IsSuccessStatusCode) return JsonSerializer.Deserialize<T>(body, JsonSerializerOptions.Web);
-            if (body.Contains("\"code\":190")) log.LogError("Page Access Token hết hạn");
+            if (body.Contains("\"code\":190")) log.LogError("Page Access Token hết hạn hoặc sai: đổi tại http://localhost:5000/settings.html");
             else log.LogWarning("Graph API lỗi {Status}: {Body}", (int)res.StatusCode, body);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)

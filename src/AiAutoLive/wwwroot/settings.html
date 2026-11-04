@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cài đặt AI Live</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 24px auto; padding: 0 16px; line-height: 1.5; color: #222; background: #fff; }
+    label { display: block; margin-top: 16px; font-weight: 600; }
+    small { font-weight: 400; color: #555; }
+    input, textarea { width: 100%; box-sizing: border-box; padding: 8px; font: inherit; }
+    textarea { min-height: 14em; font-family: ui-monospace, Consolas, monospace; font-size: 14px; }
+    button { margin-top: 20px; padding: 10px 24px; font: inherit; font-weight: 600; cursor: pointer; }
+    .warn { color: #a33; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Cài đặt</h1>
+  <form id="f">
+    <h2>Khóa bí mật</h2>
+    <p>Để trống ô nào thì giữ nguyên khóa đó. Khóa được lưu mã hóa trên máy này và không bao giờ hiện lại đầy đủ.</p>
+    <label for="OpenAIApiKey">OpenAI API key <small id="OpenAIApiKey-state"></small></label>
+    <input id="OpenAIApiKey" type="password" autocomplete="off" spellcheck="false">
+    <label for="ElevenLabsApiKey">ElevenLabs API key <small id="ElevenLabsApiKey-state"></small></label>
+    <input id="ElevenLabsApiKey" type="password" autocomplete="off" spellcheck="false">
+    <label for="PageAccessToken">Facebook Page Access Token <small id="PageAccessToken-state"></small></label>
+    <input id="PageAccessToken" type="password" autocomplete="off" spellcheck="false">
+
+    <h2>Facebook và giọng đọc</h2>
+    <label for="PageId">Facebook Page ID <small>(dãy số của Fanpage, không phải token)</small></label>
+    <input id="PageId" autocomplete="off" spellcheck="false">
+    <label for="ElevenLabsVoiceId">ElevenLabs Voice ID <small>(lấy ở mục Voices của ElevenLabs; không phải API key)</small></label>
+    <input id="ElevenLabsVoiceId" autocomplete="off" spellcheck="false">
+
+    <h2>Prompt cho AI</h2>
+    <label for="prompt">Quy tắc trả lời comment <small>(xoá trắng rồi Lưu để dùng lại prompt mặc định)</small></label>
+    <textarea id="prompt"></textarea>
+
+    <h2>Tài liệu sản phẩm</h2>
+    <label for="product">Sản phẩm, giá, khuyến mãi, giao hàng, giọng điệu <small>(AI chỉ trả lời dựa trên nội dung này)</small></label>
+    <textarea id="product"></textarea>
+    <p id="product-warn" class="warn" hidden>Tài liệu còn dòng mẫu "(Ví dụ". AI sẽ không trả lời cho tới khi bạn sửa xong.</p>
+
+    <button>Lưu</button>
+    <p id="status" role="status"></p>
+  </form>
+  <script>
+    const secrets = ['OpenAIApiKey', 'ElevenLabsApiKey', 'PageAccessToken'], ids = ['PageId', 'ElevenLabsVoiceId'];
+    const $ = id => document.getElementById(id);
+    let loaded = {};
+
+    async function load() {
+      loaded = await (await fetch('/api/settings', { cache: 'no-store' })).json();
+      for (const k of secrets) {
+        $(k).value = '';
+        $(k + '-state').textContent = loaded[k] ? `(đã có ${loaded[k]})` : '(chưa có)';
+      }
+      for (const k of ids) $(k).value = loaded[k];
+      $('prompt').value = loaded.prompt;
+      $('product').value = loaded.product;
+      $('product-warn').hidden = !loaded.productUnedited;
+    }
+
+    $('f').onsubmit = async e => {
+      e.preventDefault();
+      const body = { values: {} };
+      for (const k of [...secrets, ...ids]) body.values[k] = $(k).value;
+      // Only send the texts that changed, so an untouched default prompt is not frozen into prompt.md.
+      if ($('prompt').value !== loaded.prompt) body.prompt = $('prompt').value;
+      if ($('product').value !== loaded.product) body.product = $('product').value;
+      $('status').textContent = 'Đang lưu…';
+      try {
+        const r = await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error ?? `HTTP ${r.status}`);
+        await load();
+        $('status').textContent = 'Đã lưu. Có hiệu lực từ comment kế tiếp.';
+      } catch (err) {
+        $('status').textContent = 'Lỗi: ' + err.message;
+      }
+    };
+
+    load().catch(err => $('status').textContent = 'Không tải được cài đặt: ' + err.message);
+  </script>
+</body>
+</html>

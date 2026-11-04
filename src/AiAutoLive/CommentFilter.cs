@@ -4,7 +4,7 @@ namespace AiAutoLive;
 public sealed record Comment(string Id, string AuthorId, string AuthorName, string Message, DateTimeOffset CreatedAt);
 
 /// Cheap rules that drop comments not worth a GPT call.
-public sealed class CommentFilter(string pageId)
+public sealed class CommentFilter(Func<string> pageId)
 {
     readonly Lock gate = new();
     readonly Dictionary<string, string> lastByAuthor = new();
@@ -12,7 +12,7 @@ public sealed class CommentFilter(string pageId)
     /// null = accept; otherwise the reason it was dropped.
     public string? RejectReason(Comment c)
     {
-        if (c.AuthorId == pageId) return "comment của Page";
+        if (c.AuthorId == pageId()) return "comment của Page";
 
         var normalized = string.Join(' ', c.Message.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         var isRepeat = false;

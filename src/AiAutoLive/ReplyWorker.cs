@@ -9,7 +9,11 @@ namespace AiAutoLive;
 public sealed class ReplyWorker(HttpClient http, IOptionsMonitor<LiveOptions> options, Channel<Comment> comments,
     PlaybackQueue queue, IHostEnvironment env, ILogger<ReplyWorker> log) : BackgroundService
 {
-    public const string SystemPrompt = """
+    public const string PromptFile = "prompt.md";
+    public const string ProductFile = "product.md";
+
+    /// Used while prompt.md is missing or blank; the settings page edits prompt.md.
+    public const string DefaultPrompt = """
         Bạn là người dẫn livestream bán hàng trên Facebook, đang trả lời comment của người xem bằng giọng nói.
         Quy tắc:
         - Trả lời bằng văn nói tiếng Việt tự nhiên, thân thiện, 1 đến 2 câu, dưới 40 từ.
@@ -25,13 +29,12 @@ public sealed class ReplyWorker(HttpClient http, IOptionsMonitor<LiveOptions> op
     const int HistorySize = 10;
     const int MaxReplyChars = 400;
 
-    readonly string product = LoadProduct(Path.Combine(env.ContentRootPath, "product.md"));
     readonly string repliesDir = Path.Combine(env.ContentRootPath, "audio", "replies");
     readonly List<(string Question, string Answer)> history = [];
 
-    public static JsonObject BuildChatRequest(LiveOptions o, string product, IReadOnlyList<(string Question, string Answer)> history, Comment c)
+    public static JsonObject BuildChatRequest(LiveOptions o, string prompt, string product, IReadOnlyList<(string Question, string Answer)> history, Comment c)
     {
-        var messages = new JsonArray { Message("system", SystemPrompt + "\n\n# Thông tin sản phẩm\n" + product) };
+        var messages = new JsonArray { Message("system", prompt + "\n\n# Thông tin sản phẩm\n" + product) };
         foreach (var (q, a) in history)
         {
             messages.Add(Message("user", q));
@@ -53,12 +56,14 @@ public sealed class ReplyWorker(HttpClient http, IOptionsMonitor<LiveOptions> op
     // Speech length cap: a reply this long means GPT ignored the 40-word rule (e.g. a viewer hijacked it), so don't air it.
     public static bool IsTooLong(string reply) => reply.Length > MaxReplyChars;
 
-    public static string LoadProduct(string path)
+    // The shipped product.md is example text; answering from it would quote made-up prices on the live stream.
+    public static bool IsUnedited(string product) => product.Contains("(Ví dụ");
+
+    public static string ReadPrompt(string dir)
     {
-        var text = File.ReadAllText(path);
-        if (text.Contains("(Ví dụ"))
-            throw new InvalidOperationException("product.md vẫn còn dòng mẫu \"(Ví dụ\": sửa thông tin sản phẩm thật trước khi live");
-        return text;
+        var path = Path.Combine(dir, PromptFile);
+        var prompt = File.Exists(path) ? File.ReadAllText(path) : "";
+        return string.IsNullOrWhiteSpace(prompt) ? DefaultPrompt : prompt;
     }
 
     static JsonObject Message(string role, string content) => new() { ["role"] = role, ["content"] = content };
@@ -93,11 +98,23 @@ public sealed class ReplyWorker(HttpClient http, IOptionsMonitor<LiveOptions> op
             log.LogInformation("Bỏ comment quá cũ: {Message}", c.Message);
             return;
         }
+        if (string.IsNullOrWhiteSpace(o.OpenAIApiKey) || string.IsNullOrWhiteSpace(o.ElevenLabsApiKey) || string.IsNullOrWhiteSpace(o.ElevenLabsVoiceId))
+        {
+            log.LogWarning("Chưa có OpenAI API key, ElevenLabs API key hoặc Voice ID: điền tại http://localhost:5000/settings.html. Bỏ comment");
+            return;
+        }
+        // Re-read on every comment so edits made on the settings page apply right away.
+        var product = File.ReadAllText(Path.Combine(env.ContentRootPath, ProductFile));
+        if (IsUnedited(product))
+        {
+            log.LogWarning("Tài liệu sản phẩm còn dòng mẫu \"(Ví dụ\": sửa tại http://localhost:5000/settings.html. Bỏ comment");
+            return;
+        }
 
         var question = UserLine(c);
         using var gptReq = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions")
         {
-            Content = JsonContent.Create(BuildChatRequest(o, product, history, c)),
+            Content = JsonContent.Create(BuildChatRequest(o, ReadPrompt(env.ContentRootPath), product, history, c)),
         };
         gptReq.Headers.Authorization = new("Bearer", o.OpenAIApiKey);
         using var gptRes = await http.SendAsync(gptReq, ct);

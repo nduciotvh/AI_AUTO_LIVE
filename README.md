@@ -7,22 +7,20 @@ Thiết kế: [docs/superpowers/specs/2026-11-04-ai-voice-livestream-design.md](
 ## Chuẩn bị
 
 1. Bỏ các file mp3 nền vào `src/AiAutoLive/audio/playlist/`. Đặt tên theo thứ tự muốn phát: `01-chao.mp3`, `02-gioi-thieu.mp3`, … Playlist phát lặp vòng.
-2. Sửa `src/AiAutoLive/product.md`: thông tin sản phẩm, giá, giao hàng, giọng điệu. GPT chỉ trả lời dựa trên file này. **Xoá hết các dòng "(Ví dụ …)"**: app sẽ không chạy khi file còn dòng mẫu, để tránh đọc giá giả lên live.
-3. Trong `src/AiAutoLive/appsettings.json`, điền `Live:PageId` và `Live:ElevenLabsVoiceId`.
+2. Chạy app (mục **Chạy** bên dưới), rồi mở trang cài đặt `http://localhost:5000/settings.html` và điền như ở mục **Cài đặt**.
 
-## Bí mật
+## Cài đặt
 
-Chạy trong thư mục `src/AiAutoLive`:
+Mọi thứ điền trên trang `http://localhost:5000/settings.html`, không cần chạy lệnh nào. Bấm **Lưu** là có hiệu lực từ comment kế tiếp, không cần khởi động lại app.
 
-```bash
-dotnet user-secrets set "Live:OpenAIApiKey" "sk-..."
-dotnet user-secrets set "Live:ElevenLabsApiKey" "..."
-dotnet user-secrets set "Live:PageAccessToken" "..."
-```
+- **Khóa bí mật:** OpenAI API key, ElevenLabs API key, Facebook Page Access Token. Để trống ô nào thì giữ nguyên khóa đó. Trang chỉ hiện 4 ký tự cuối của khóa đã lưu.
+- **Facebook Page ID** và **ElevenLabs Voice ID**. Voice ID lấy ở mục Voices của ElevenLabs, khác với API key.
+- **Prompt cho AI:** quy tắc trả lời. Xoá trắng ô này rồi Lưu để dùng lại prompt mặc định. Prompt được lưu trong `src/AiAutoLive/prompt.md`.
+- **Tài liệu sản phẩm:** sản phẩm, giá, giao hàng, giọng điệu. AI chỉ trả lời dựa trên nội dung này, gửi kèm nguyên văn mỗi lần hỏi. Lưu trong `src/AiAutoLive/product.md`. **Xoá hết các dòng "(Ví dụ …)"**: khi còn dòng mẫu, AI không trả lời để tránh đọc giá giả lên live.
+
+Khóa và ID được mã hóa bằng tài khoản Windows của bạn và lưu ở `%APPDATA%\AiAutoLive\settings.dat`, nằm ngoài repo nên không bị commit. Chỉ đúng tài khoản Windows đó trên máy đó mới đọc được; sang máy khác thì điền lại.
 
 Page Access Token phải có quyền `pages_read_engagement` và `pages_read_user_content`.
-
-User-secrets chỉ được nạp khi chạy bằng `dotnet run` (môi trường Development). Nếu chạy bản publish, đặt biến môi trường `Live__OpenAIApiKey`, `Live__ElevenLabsApiKey`, `Live__PageAccessToken`.
 
 ## Chạy
 
