@@ -7,7 +7,7 @@ Thiết kế: [docs/superpowers/specs/2026-11-04-ai-voice-livestream-design.md](
 ## Chuẩn bị
 
 1. Bỏ các file mp3 nền vào `src/AiAutoLive/audio/playlist/`. Đặt tên theo thứ tự muốn phát: `01-chao.mp3`, `02-gioi-thieu.mp3`, … Playlist phát lặp vòng.
-2. Sửa `src/AiAutoLive/product.md`: thông tin sản phẩm, giá, giao hàng, giọng điệu. GPT chỉ trả lời dựa trên file này. **Xoá hết các dòng "(Ví dụ …)".**
+2. Sửa `src/AiAutoLive/product.md`: thông tin sản phẩm, giá, giao hàng, giọng điệu. GPT chỉ trả lời dựa trên file này. **Xoá hết các dòng "(Ví dụ …)"**: app sẽ không chạy khi file còn dòng mẫu, để tránh đọc giá giả lên live.
 3. Trong `src/AiAutoLive/appsettings.json`, điền `Live:PageId` và `Live:ElevenLabsVoiceId`.
 
 ## Bí mật
@@ -38,6 +38,8 @@ App tự tìm video đang LIVE của Page (hoặc dùng `Live:LiveVideoId` nếu
 Thêm **Browser Source** với URL `http://localhost:5000/player.html`, tích **Control audio via OBS**. Âm lượng chỉnh trong Audio Mixer của OBS.
 
 Có thể mở cùng URL đó bằng Chrome để nghe thử. Chrome chặn tự phát tiếng, nên bấm nút "Bắt đầu" nếu thấy nút này hiện ra.
+
+**Chỉ để một player chạy tại một thời điểm.** Mỗi player lấy mục kế tiếp ra khỏi hàng đợi, nên nếu tab Chrome nghe thử vẫn mở khi đang live, Chrome và OBS sẽ chia nhau clip và câu trả lời, người xem live chỉ nghe được khoảng một nửa. Đóng tab Chrome trước khi live, và trong OBS chỉ dùng một Browser Source này.
 
 ## Test không cần live
 
