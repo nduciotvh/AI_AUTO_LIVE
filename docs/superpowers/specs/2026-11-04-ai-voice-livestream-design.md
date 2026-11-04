@@ -86,7 +86,15 @@ GPT là lớp lọc thứ hai: comment không cần trả lời (chào hỏi chu
 
 ## 7. Sinh câu trả lời
 
-**GPT** — `POST https://api.openai.com/v1/chat/completions`, model lấy từ config (mặc định `gpt-4.1-mini`), dùng `max_completion_tokens`, timeout 10 giây.
+**Chọn model.** Cả hai model đều lấy từ config, có mặc định nhưng đổi được sang model khác chỉ bằng sửa `appsettings.json`, không sửa code. `ReplyWorker` đọc các trường này qua `IOptionsMonitor` ở mỗi lần gọi, nên sửa lúc đang live có hiệu lực ngay cho comment kế tiếp, không cần khởi động lại.
+
+**GPT** — `POST https://api.openai.com/v1/chat/completions`, model = `OpenAIModel` (mặc định `gpt-4.1-mini`), timeout 10 giây. Request chỉ dùng tham số mọi model chat của OpenAI đều nhận, để đổi model không vỡ:
+
+- không gửi `temperature` (model suy luận không nhận);
+- `max_completion_tokens: 500` — câu trả lời ngắn do prompt quyết định, con số này chỉ là trần an toàn và đủ chỗ cho token suy luận;
+- `reasoning_effort` chỉ gửi khi `OpenAIReasoningEffort` có giá trị. Để trống với `gpt-4.1-mini` (model này không nhận tham số đó); khi đổi sang model suy luận thì đặt `minimal` hoặc `low` để giữ độ trễ dưới timeout.
+
+GPT trả nội dung rỗng (ví dụ model suy luận dùng hết token) → coi như lỗi, bỏ comment.
 
 Message gồm:
 
@@ -95,7 +103,7 @@ Message gồm:
 3. Tối đa 10 lượt hỏi–đáp gần nhất (cặp user/assistant) để giữ mạch hội thoại.
 4. Comment hiện tại dạng `"{tên}: {nội dung}"`.
 
-**ElevenLabs** — `POST https://api.elevenlabs.io/v1/text-to-speech/{VoiceId}?output_format=mp3_44100_128`, header `xi-api-key`, body `{ "text", "model_id" }` (mặc định `eleven_flash_v2_5`, có tiếng Việt, độ trễ thấp), timeout 10 giây. Lưu bytes trả về vào `audio/replies/{commentId}.mp3`.
+**ElevenLabs** — `POST https://api.elevenlabs.io/v1/text-to-speech/{VoiceId}?output_format=mp3_44100_128`, header `xi-api-key`, body `{ "text", "model_id" }`, `model_id` = `ElevenLabsModelId` (mặc định `eleven_flash_v2_5`, có tiếng Việt, độ trễ thấp), timeout 10 giây. Mọi model của ElevenLabs dùng chung endpoint này, nên đổi model chỉ là sửa config; người vận hành tự chọn model có hỗ trợ tiếng Việt. `VoiceId` đổi được theo cùng cách. Lưu bytes trả về vào `audio/replies/{commentId}.mp3`.
 
 ## 8. Facebook Graph API
 
@@ -137,6 +145,7 @@ Message gồm:
     "ReplyMaxAgeSeconds": 90,
     "MaxRepliesInRow": 2,
     "OpenAIModel": "gpt-4.1-mini",
+    "OpenAIReasoningEffort": "",
     "ElevenLabsVoiceId": "",
     "ElevenLabsModelId": "eleven_flash_v2_5"
   }
@@ -149,7 +158,7 @@ Bí mật đặt bằng `dotnet user-secrets` hoặc biến môi trường, khô
 - `Live:ElevenLabsApiKey`
 - `Live:PageAccessToken`
 
-Thiếu key nào hoặc thiếu `PageId` / `ElevenLabsVoiceId` → app dừng ngay khi khởi động, log rõ tên key.
+Thiếu key nào hoặc thiếu `PageId` / `ElevenLabsVoiceId` / `OpenAIModel` / `ElevenLabsModelId` → app dừng ngay khi khởi động, log rõ tên key. Tên model không được kiểm tra trước: model sai sẽ lộ ra ở lần gọi đầu qua log lỗi của API (mục 12).
 
 ## 12. Xử lý lỗi
 
@@ -157,7 +166,7 @@ Nguyên tắc: **không lỗi nào được làm im tiếng live.**
 
 | Lỗi | Xử lý |
 |---|---|
-| GPT / ElevenLabs lỗi hoặc quá 10 giây | Log, bỏ comment, xử lý comment tiếp. Không retry. |
+| GPT / ElevenLabs lỗi, quá 10 giây, hoặc GPT trả rỗng | Log (kèm tên model và thông báo lỗi của API, ví dụ model không tồn tại), bỏ comment, xử lý comment tiếp. Không retry. |
 | Graph API lỗi mạng / 5xx | Log, thử lại ở lần poll sau. |
 | Token hết hạn (Graph error code `190`) | Log `Page Access Token hết hạn`, tiếp tục thử lại (playlist vẫn phát). |
 | Không thấy video LIVE | Log, dò lại mỗi 10 giây. |
