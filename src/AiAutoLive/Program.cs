@@ -21,6 +21,7 @@ builder.Services.AddSingleton(new CommentFilter(o.PageId));
 builder.Services.AddSingleton(Channel.CreateBounded<Comment>(
     new BoundedChannelOptions(o.MaxPendingComments) { FullMode = BoundedChannelFullMode.DropOldest }));
 builder.Services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromSeconds(10) });
+builder.Services.AddHostedService<ReplyWorker>();
 
 var app = builder.Build();
 app.Logger.LogInformation("Đã nạp {Count} clip playlist từ {Dir}", playlist.Count, playlistDir);
