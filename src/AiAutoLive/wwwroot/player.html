@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>AI Live Player</title>
+</head>
+<body>
+  <button id="start" hidden>Bắt đầu</button>
+  <audio id="a"></audio>
+  <script>
+    const a = document.getElementById('a'), btn = document.getElementById('start');
+    // Exactly one chain of next() calls: play() failures other than autoplay blocking are left to onerror.
+    async function next() {
+      let url;
+      try {
+        const r = await fetch('/api/next', { cache: 'no-store' });
+        if (r.status === 200) url = (await r.json()).url;
+      } catch {}
+      if (!url) return setTimeout(next, 1000);
+      a.src = url;
+      a.play().catch(e => { if (e.name === 'NotAllowedError') btn.hidden = false; });
+    }
+    a.onended = next;
+    a.onerror = () => setTimeout(next, 1000);
+    btn.onclick = () => { btn.hidden = true; a.play(); };
+    next();
+  </script>
+</body>
+</html>
